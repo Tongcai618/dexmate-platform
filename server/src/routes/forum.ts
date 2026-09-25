@@ -61,10 +61,12 @@ r.post('/topics/:id/replies', (req, res) => {
   res.status(201).json(topicToApi(t, req.principal.userId))
 })
 
-// One vote per user per reply; voting again is a no-op.
+// One vote per user per reply; voting again is a no-op. Votes are preference labels,
+// so self-votes are rejected to keep that signal clean.
 r.post('/replies/:id/vote', (req, res) => {
   authz.requireScope(req.principal, 'forum:write')
   const reply = loadReply(req.params.id)
+  if (reply.author === req.principal.userId) throw new HttpError(409, "You can't vote on your own reply")
   run('INSERT OR IGNORE INTO reply_votes VALUES (?, ?)', reply.id, req.principal.userId)
   res.json(topicToApi(loadTopic(reply.topic_id), req.principal.userId))
 })

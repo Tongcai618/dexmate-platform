@@ -64,7 +64,7 @@ export default function Forum({ user }: { user: User }) {
       {open.replies.map((r) => (
         <section key={r.id} className={r.accepted ? 'card reply accepted' : 'card reply'}>
           <div className="votes-col">
-            <button className="link" disabled={r.voted} title={r.voted ? 'You upvoted this' : 'Upvote'} onClick={() => mutate(() => api<Topic>(`/replies/${r.id}/vote`, { method: 'POST' }))}>▲</button>
+            <button className="link" disabled={r.voted || r.author === user.id} title={r.voted ? 'You upvoted this' : r.author === user.id ? 'Your reply' : 'Upvote'} onClick={() => mutate(() => api<Topic>(`/replies/${r.id}/vote`, { method: 'POST' }))}>▲</button>
             <b>{r.votes}</b>
           </div>
           <div className="grow">

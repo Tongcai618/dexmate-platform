@@ -328,6 +328,7 @@ describe('forum', () => {
     topic = (await call('POST', `/replies/${reply.id}/vote`, { token: bob })).body
     assert.equal(topic.replies.at(-1).votes, 1)
     assert.equal(topic.replies.at(-1).voted, true)
+    assert.equal((await call('POST', `/replies/${reply.id}/vote`, { token: alice })).status, 409, 'no self-votes')
 
     assert.equal((await call('POST', `/replies/${reply.id}/accept`, { token: bob })).status, 403)
 
