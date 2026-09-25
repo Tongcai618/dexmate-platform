@@ -28,8 +28,9 @@ cd /Users/tongcai/Desktop/T/I/Interview/web
 npm run dev
 ```
 
-Log in as `alice@dexmate.ai` (or `bob@` / `carol@`) with password `demo`.
-To get the MFA code, run `npm run totp` in `server/`.
+Log in as `alice@dexmate.ai` with password `123456`. In dev the 2FA code isn't checked, so type anything
+(or nothing) and press Verify. `bob@` / `carol@` use password `demo`.
+With `DEMO_AUTH=off` the server checks real codes: run `npm run totp -- alice` in `server/` to get one.
 
 Other server commands: `npm start` (no auto-restart), `npm test`, `npm run typecheck`,
 `npm run reset` (deletes the SQLite DB; it gets re-seeded on the next start).

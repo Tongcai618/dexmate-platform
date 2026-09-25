@@ -12,38 +12,48 @@ export const publicUser = (u: { id: string; name: string; email: string }) => ({
 const r = Router()
 const perIp = rateLimit((req) => `auth:${req.ip}`, Number(process.env.AUTH_RATE_LIMIT ?? 20))
 
-// Demo only: accept a fixed MFA code (e.g. DEMO_MFA_CODE=123456). Ignored in production.
-const demoMfaCode = process.env.NODE_ENV === 'production' ? undefined : process.env.DEMO_MFA_CODE
-if (demoMfaCode) console.warn('DEMO_MFA_CODE is set; a fixed MFA code is accepted for every user.')
+// Demo auth, for local development and demos: DEMO_LOGIN always signs in, and the MFA
+// step accepts any code for every user. Off when NODE_ENV=production or DEMO_AUTH=off.
+export const DEMO_LOGIN = { email: 'alice@dexmate.ai', password: '123456' }
+export const demoAuthEnabled = (env: NodeJS.ProcessEnv = process.env) => env.NODE_ENV !== 'production' && env.DEMO_AUTH !== 'off'
+const demoAuth = demoAuthEnabled()
+if (demoAuth) {
+  console.warn(`Demo auth is ON: ${DEMO_LOGIN.email} / ${DEMO_LOGIN.password} always signs in and MFA codes are not checked. Set DEMO_AUTH=off to disable.`)
+}
+
+// Lets the login page describe the current mode.
+r.get('/config', (_req, res) => {
+  res.json({ demo: demoAuth })
+})
 
 // Step 1: password. Returns a short-lived MFA challenge, never a session.
 r.post('/login', perIp, (req, res) => {
   const email = str(req.body, 'email').toLowerCase()
   const password = str(req.body, 'password')
   const user = get<UserRow>('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL', email)
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  const demoLogin = demoAuth && email === DEMO_LOGIN.email && password === DEMO_LOGIN.password
+  if (!user || !(demoLogin || verifyPassword(password, user.password_hash))) {
     audit(`email:${email}`, 'auth.login', 'password', false)
     throw new HttpError(401, 'Invalid email or password')
   }
   res.json({ mfaToken: signMfa(user.id) })
 })
 
-// Step 2: TOTP. Each code can be used once.
+// Step 2: TOTP. Each code can be used once. In demo auth the code isn't checked.
 r.post('/mfa', perIp, (req, res) => {
   const claims = verify(str(req.body, 'mfaToken', 2000), 'mfa')
-  const code = str(req.body, 'code', 6)
   const user = get<UserRow>('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL', claims.sub)
   if (!user) throw new HttpError(401, 'Sign-in expired, start again')
 
-  let step: number | null
-  if (demoMfaCode && code === demoMfaCode) {
-    step = user.totp_last_step
-  } else {
-    step = /^\d{6}$/.test(code) ? verifyTotp(user.totp_secret, code) : null
-    if (step === null || step <= user.totp_last_step) {
+  let step = user.totp_last_step
+  if (!demoAuth) {
+    const code = str(req.body, 'code', 6)
+    const matched = /^\d{6}$/.test(code) ? verifyTotp(user.totp_secret, code) : null
+    if (matched === null || matched <= user.totp_last_step) {
       audit(`user:${user.id}`, 'auth.mfa', 'totp', false)
       throw new HttpError(401, 'That code is invalid or has already been used')
     }
+    step = matched
   }
 
   const sid = randomId('ses')
@@ -51,7 +61,7 @@ r.post('/mfa', perIp, (req, res) => {
     run('UPDATE users SET totp_last_step = ? WHERE id = ?', step, user.id)
     run('INSERT INTO sessions (id, user_id, created_at) VALUES (?, ?, ?)', sid, user.id, now())
   })
-  audit(`user:${user.id}`, 'auth.login', `session:${sid}`, true)
+  audit(`user:${user.id}`, 'auth.login', `session:${sid}`, true, demoAuth ? { mfa: 'not checked (demo auth)' } : undefined)
   res.json({ token: signSession(user.id, sid), user: publicUser(user) })
 })
 

@@ -10,7 +10,7 @@ const dir = mkdtempSync(join(tmpdir(), 'dexmate-test-'))
 process.env.DB_PATH = join(dir, 'test.db')
 process.env.JWT_SECRET = 'test-secret'
 process.env.AUTH_RATE_LIMIT = '1000'
-delete process.env.DEMO_MFA_CODE // tests exercise real TOTP
+process.env.DEMO_AUTH = 'off' // this suite exercises real password + TOTP checks; see demo-auth.test.ts
 const { app } = await import('../src/app.ts')
 const { get, run } = await import('../src/db.ts')
 const { totpCode, totpStep } = await import('../src/crypto.ts')
